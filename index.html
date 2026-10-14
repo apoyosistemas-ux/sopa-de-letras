@@ -1,0 +1,918 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AI Web Builder Demo - Sopa de Letras Dinámica</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Canvas Confetti -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Inter:wght@400;500;600;700&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #060911;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(6, 182, 212, 0.14) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(139, 92, 246, 0.12) 0px, transparent 50%),
+                radial-gradient(at 50% 100%, rgba(16, 185, 129, 0.08) 0px, transparent 50%);
+            color: #f3f4f6;
+            overflow-x: hidden;
+        }
+        .title-font { font-family: 'Orbitron', sans-serif; }
+        .code-font { font-family: 'Fira Code', monospace; }
+
+        #board { touch-action: none; }
+        
+        .letter-cell {
+            user-select: none;
+            -webkit-user-select: none;
+            transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1), background-color 0.15s ease, color 0.15s ease;
+        }
+        @media (hover: hover) {
+            .letter-cell:hover:not(.selected):not(.found) {
+                background-color: #1e293b;
+                transform: scale(1.06);
+                border-color: #38bdf8;
+            }
+        }
+        .letter-cell.selected {
+            background-color: #06b6d4 !important;
+            color: #090d16 !important;
+            font-weight: 800;
+            transform: scale(1.08);
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.7);
+            border-color: #67e8f9 !important;
+            z-index: 10;
+        }
+        .letter-cell.found {
+            color: #ffffff !important;
+            font-weight: 800;
+            animation: popIn 0.3s ease-out;
+        }
+        .letter-cell.hint-flash {
+            animation: hintPulse 1.5s infinite;
+            background-color: #f59e0b !important;
+            color: #000 !important;
+        }
+        @keyframes popIn {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.22); }
+            100% { transform: scale(1); }
+        }
+        @keyframes hintPulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.8); transform: scale(1); }
+            50% { box-shadow: 0 0 20px 6px rgba(245, 158, 11, 0.4); transform: scale(1.12); }
+        }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #0f172a; }
+        ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-between p-3 md:p-6">
+
+    <!-- Cabecera con Enfoque en Creación con IA -->
+    <header class="w-full max-w-6xl mb-4">
+        <div class="flex flex-col md:flex-row items-center justify-between gap-4 bg-slate-900/70 border border-slate-800/80 px-5 py-4 rounded-2xl backdrop-blur-md">
+            <div class="text-center md:text-left">
+                <div class="inline-flex items-center gap-2 px-3 py-1 mb-1.5 text-xs font-semibold tracking-wider text-cyan-400 uppercase bg-cyan-950/70 border border-cyan-800/60 rounded-full">
+                    <span>⚡ Demostrador Interactivo</span> • <span>Construido con Web + IA</span>
+                </div>
+                <h1 class="title-font text-xl sm:text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 tracking-wide">
+                    DE LA IDEA AL CÓDIGO CON IA
+                </h1>
+                <p class="text-gray-400 text-xs sm:text-sm mt-0.5">
+                    El juego es solo un ejemplo: descubre cómo la tecnología y la IA permiten construir soluciones para cualquier temática en minutos.
+                </p>
+            </div>
+
+            <!-- Botones de Demostración Tecnológica -->
+            <div class="flex flex-wrap justify-center gap-2.5 shrink-0">
+                <button onclick="openCustomModal()" class="bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-500/40 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-1.5 shadow-lg">
+                    ✨ Crear Tu Propio Tema
+                </button>
+                <button onclick="openAIModal()" class="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 px-4 py-2 rounded-xl text-xs sm:text-sm font-black transition flex items-center gap-1.5 shadow-lg shadow-cyan-500/20">
+                    🤖 ¿Cómo se creó con IA?
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Barra de Controles del Juego -->
+    <div class="flex flex-wrap items-center justify-between gap-3 mb-5 bg-slate-900/90 backdrop-blur-md border border-slate-800 p-3 md:px-5 rounded-2xl shadow-xl w-full max-w-6xl">
+        
+        <!-- Selector de Temáticas y Dificultad -->
+        <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+            <div class="flex items-center gap-1.5">
+                <span class="text-xs text-gray-400 font-semibold hidden sm:inline">🌍 Tema:</span>
+                <select id="themeSelect" onchange="changeTheme()" class="bg-slate-950 text-cyan-300 text-xs sm:text-sm font-bold px-3 py-2 rounded-xl border border-slate-700 focus:outline-none focus:border-cyan-500 cursor-pointer">
+                    <option value="tech">💻 Desarrollo & IA</option>
+                    <option value="media">🎬 Cine, Música & Eventos</option>
+                    <option value="business">🚀 Emprendimiento & Futuro</option>
+                    <option value="nature">🌿 Naturaleza & Cultura</option>
+                </select>
+            </div>
+
+            <select id="difficultySelect" onchange="changeDifficulty()" class="bg-slate-950 text-gray-200 text-xs sm:text-sm font-semibold px-3 py-2 rounded-xl border border-slate-700 focus:outline-none focus:border-cyan-500 cursor-pointer">
+                <option value="easy">Fácil (H y V)</option>
+                <option value="medium" selected>Medio (+Diagonal)</option>
+                <option value="hard">Experto (+Invertidas)</option>
+            </select>
+        </div>
+
+        <!-- Estadísticas en Vivo -->
+        <div class="flex items-center gap-3 sm:gap-5">
+            <div class="flex items-center gap-1.5 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
+                <span class="text-gray-400 text-xs">⏱️</span>
+                <span id="timer" class="title-font text-sm sm:text-base text-yellow-400 font-bold">00:00</span>
+            </div>
+            <div class="flex items-center gap-1.5 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
+                <span class="text-gray-400 text-xs">🎯</span>
+                <span id="score" class="title-font text-sm sm:text-base text-emerald-400 font-bold">0 / 8</span>
+            </div>
+        </div>
+
+        <!-- Acciones Rápidas -->
+        <div class="flex items-center gap-2">
+            <button id="hintBtn" onclick="useHint()" title="Iluminar primera letra (+10s)" class="bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition flex items-center gap-1 active:scale-95">
+                💡 Pista <span id="hintCount" class="bg-amber-500 text-slate-950 px-1.5 rounded-full text-xs font-extrabold">3</span>
+            </button>
+            <button id="soundBtn" onclick="toggleSound()" class="bg-slate-800 hover:bg-slate-700 text-gray-200 p-2 rounded-xl border border-slate-700 transition text-xs sm:text-sm">
+                🔊
+            </button>
+            <button onclick="startGame()" class="bg-slate-800 hover:bg-slate-700 text-cyan-400 border border-cyan-500/30 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold transition active:scale-95">
+                🔄 Reiniciar
+            </button>
+        </div>
+    </div>
+
+    <!-- Layout Principal: 3 Columnas en Desktop (Tablero + Palabras + Récords/IA) -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 w-full max-w-6xl mb-6 items-start">
+        
+        <!-- Columna 1: Tablero (6 cols en LG) -->
+        <div class="lg:col-span-6 flex flex-col items-center justify-center bg-slate-900/90 p-4 rounded-2xl border border-slate-800 shadow-2xl">
+            <div class="w-full flex items-center justify-between mb-2 px-1">
+                <span id="activeThemeBadge" class="text-xs font-semibold text-gray-400">Tema: Desarrollo & IA</span>
+                <div id="currentWordPreview" class="px-3 py-0.5 rounded-full bg-slate-950 border border-slate-800 text-cyan-400 title-font text-xs font-bold tracking-widest">
+                    ARRASTRA PARA SELECCIONAR
+                </div>
+            </div>
+
+            <div id="board" class="grid grid-cols-12 gap-1 sm:gap-1.5 my-1">
+                <!-- Generado por JS -->
+            </div>
+        </div>
+
+        <!-- Columna 2: Palabras Objetivo + Dato Contextual (3 cols en LG) -->
+        <div class="lg:col-span-3 bg-slate-900/90 border border-slate-800 p-4 rounded-2xl shadow-xl flex flex-col justify-between h-full">
+            <div>
+                <div class="flex items-center justify-between border-b border-slate-800 pb-2.5 mb-3">
+                    <h3 class="title-font text-cyan-400 font-bold text-sm">📋 Conceptos</h3>
+                    <span class="text-[11px] text-gray-500">Clic para definición</span>
+                </div>
+                <ul id="wordList" class="grid grid-cols-2 lg:grid-cols-1 gap-2 text-xs sm:text-sm">
+                    <!-- Llenado por JS -->
+                </ul>
+            </div>
+
+            <!-- Cápsula Informativa -->
+            <div class="mt-4 p-3 rounded-xl bg-slate-950 border border-slate-800/90 text-xs text-gray-300 leading-relaxed">
+                <span class="text-cyan-400 font-bold block mb-1">💡 Contexto del Concepto:</span>
+                <p id="infoText">Haz clic en cualquier palabra de la lista o encuéntrala en el tablero para conocer su utilidad en el mundo real.</p>
+            </div>
+        </div>
+
+        <!-- Columna 3: Salón de la Fama (Récords) + Consola de Arquitectura IA (3 cols en LG) -->
+        <div class="lg:col-span-3 flex flex-col gap-4">
+            
+            <!-- Tabla de Récords Local -->
+            <div class="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl shadow-xl">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-2.5 mb-3">
+                    <h3 class="title-font text-yellow-400 font-bold text-sm flex items-center gap-1.5">
+                        🏆 Top Récords
+                    </h3>
+                    <button onclick="clearRecords()" title="Borrar récords de este tema" class="text-[11px] text-gray-500 hover:text-red-400 transition">
+                        Limpiar
+                    </button>
+                </div>
+                <div id="leaderboardList" class="space-y-2 text-xs">
+                    <!-- Se llena dinámicamente con localStorage -->
+                </div>
+            </div>
+
+            <!-- Panel Educativo: El Poder de Crear con IA -->
+            <div class="bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-950/60 border border-indigo-500/30 p-4 rounded-2xl shadow-xl text-xs">
+                <div class="flex items-center gap-2 text-indigo-400 font-bold mb-2">
+                    <span>🧠</span>
+                    <span class="title-font text-[11px] tracking-wider uppercase">Metodología AI-First</span>
+                </div>
+                <p class="text-gray-300 leading-relaxed mb-3">
+                    Antes, programar esta aplicación con <strong>lógica vectorial, audio sintetizado y récords</strong> tomaba días. Hoy, combinando fundamentos de programación con IA, lo construyes en minutos.
+                </p>
+                <div class="bg-slate-950/90 p-2.5 rounded-xl border border-slate-800 code-font text-[11px] text-emerald-400">
+                    <div>&gt; Idea Humana + Prompt</div>
+                    <div>&gt; Generación de Código</div>
+                    <div>&gt; Producto Funcional 🚀</div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- MODAL 1: Victoria + Registro de Récord -->
+    <div id="winModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+        <div class="bg-slate-900 border-2 border-cyan-500 p-6 sm:p-8 rounded-2xl max-w-md w-full text-center shadow-2xl">
+            <div class="text-5xl mb-2 animate-bounce">🏆</div>
+            <h2 class="title-font text-2xl font-black text-cyan-400 mb-1">¡RETO COMPLETADO!</h2>
+            <p class="text-gray-400 text-xs sm:text-sm mb-4">
+                Encontraste todos los conceptos en <span id="finalTime" class="text-yellow-400 font-bold title-font">00:00</span>.
+            </p>
+
+            <!-- Formulario para Guardar Récord -->
+            <div id="saveScoreSection" class="bg-slate-950 p-4 rounded-xl border border-slate-800 mb-5 text-left">
+                <label class="block text-xs text-gray-300 font-semibold mb-2">
+                    ✍️ Registra tu nombre en el Top de la Feria:
+                </label>
+                <div class="flex gap-2">
+                    <input type="text" id="playerNameInput" maxlength="15" placeholder="Tu nombre o alias..." class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-cyan-400">
+                    <button onclick="savePlayerRecord()" class="bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold px-4 py-2 rounded-lg text-xs sm:text-sm transition shrink-0">
+                        Guardar
+                    </button>
+                </div>
+            </div>
+
+            <button onclick="startGame()" class="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 font-black py-3 rounded-xl transition shadow-lg text-sm">
+                🔄 Jugar de Nuevo
+            </button>
+        </div>
+    </div>
+
+    <!-- MODAL 2: Crear Tu Propio Tema (Demostrador de Dinamismo) -->
+    <div id="customModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+        <div class="bg-slate-900 border border-purple-500/60 p-6 rounded-2xl max-w-lg w-full shadow-2xl">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3 mb-4">
+                <h2 class="title-font text-lg sm:text-xl font-bold text-purple-400">✨ Generador de Temáticas en Vivo</h2>
+                <button onclick="closeCustomModal()" class="text-gray-400 hover:text-white text-xl">&times;</button>
+            </div>
+            <p class="text-xs sm:text-sm text-gray-300 mb-4">
+                Demuestra a los visitantes que el código es un motor adaptable: escribe cualquier temática (ej. <em>Deportes, Música, Medicina, Anime</em>) y el algoritmo construirá el tablero al instante.
+            </p>
+            <div class="space-y-3 mb-5">
+                <div>
+                    <label class="text-xs text-gray-400 font-semibold block mb-1">Nombre de la Temática:</label>
+                    <input id="customThemeName" type="text" placeholder="Ej: Bandas de Rock, Fútbol, Astronomía..." class="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-sm text-white focus:outline-none focus:border-purple-400">
+                </div>
+                <div>
+                    <label class="text-xs text-gray-400 font-semibold block mb-1">Palabras (separadas por coma, máx 11 letras por palabra):</label>
+                    <textarea id="customWordsInput" rows="3" placeholder="Ej: GALAXIA, PLANETA, COMETA, ESTRELLA, ORBITA, ECLIPSE" class="w-full bg-slate-950 border border-slate-700 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-purple-400"></textarea>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2">
+                <button onclick="closeCustomModal()" class="px-4 py-2 rounded-xl bg-slate-800 text-gray-300 text-xs sm:text-sm font-semibold">Cancelar</button>
+                <button onclick="applyCustomTheme()" class="px-5 py-2 rounded-xl bg-purple-500 hover:bg-purple-400 text-slate-950 text-xs sm:text-sm font-black transition">⚡ Generar Tablero</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL 3: ¿Cómo se construyó con IA? (Propósito del Proyecto) -->
+    <div id="aiModal" class="hidden fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+        <div class="bg-slate-900 border border-cyan-500/60 p-6 rounded-2xl max-w-2xl w-full shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div class="flex justify-between items-center border-b border-slate-800 pb-3 mb-4">
+                <h2 class="title-font text-lg sm:text-xl font-bold text-cyan-400">🤖 El Verdadero Proyecto: Crear con IA</h2>
+                <button onclick="closeAIModal()" class="text-gray-400 hover:text-white text-xl">&times;</button>
+            </div>
+            
+            <div class="space-y-4 text-xs sm:text-sm text-gray-300 leading-relaxed">
+                <p>
+                    Este proyecto no trata sobre una sopa de letras; trata sobre <strong>cómo la Inteligencia Artificial amplifica nuestra capacidad de construir tecnología</strong>. Con una idea clara y sabiendo estructurar instrucciones (<em>Prompts</em>), podemos desarrollar herramientas web completas en una fracción del tiempo tradicional.
+                </p>
+
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 my-3">
+                    <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+                        <div class="text-cyan-400 font-bold mb-1">1. La Idea Humana</div>
+                        <p class="text-xs text-gray-400">Definir qué problema resolver, la experiencia del usuario, las temáticas y las reglas del sistema.</p>
+                    </div>
+                    <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+                        <div class="text-purple-400 font-bold mb-1">2. Co-Creación con IA</div>
+                        <p class="text-xs text-gray-400">Iterar con IA para generar algoritmos complejos: geometría vectorial para el arrastre, Web Audio API y persistencia de datos.</p>
+                    </div>
+                    <div class="bg-slate-950 p-3.5 rounded-xl border border-slate-800">
+                        <div class="text-emerald-400 font-bold mb-1">3. Producto Real</div>
+                        <p class="text-xs text-gray-400">Un único archivo HTML5 autónomo, adaptable a celulares y listo para usar en educación, eventos o negocios.</p>
+                    </div>
+                </div>
+
+                <div class="bg-slate-950 p-4 rounded-xl border border-slate-800">
+                    <span class="text-xs font-bold text-amber-400 uppercase block mb-2">🔍 Qué hay debajo del capó (Tecnologías generadas):</span>
+                    <ul class="list-disc list-inside space-y-1 text-xs text-gray-300">
+                        <li><strong> Geometría Vectorial en JS:</strong> Calcula ángulos de 0°, 45° y 90° en tiempo real para que el trazo nunca falle.</li>
+                        <li><strong> Sintetizador Web Audio API:</strong> Los efectos de sonido se generan matemáticamente con ondas senoidales (sin archivos MP3 externos).</li>
+                        <li><strong> Persistencia LocalStorage:</strong> Base de datos en el navegador que guarda récords independientes por cada temática.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="mt-6 text-right">
+                <button onclick="closeAIModal()" class="bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-black px-6 py-2.5 rounded-xl text-xs sm:text-sm transition">
+                    ¡Entendido, volver al demostrador!
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pie de página -->
+    <footer class="text-xs text-gray-500 text-center py-2">
+        Demostración de Desarrollo Web Asistido por IA 🚀 • Conocimiento Humano + Potencia Algorítmica
+    </footer>
+
+    <script>
+        // Base de datos de Temáticas variadas (Tecnología, Cultura, Emprendimiento, Naturaleza)
+        const themesData = {
+            tech: {
+                name: "Desarrollo & IA",
+                words: [
+                    { word: "PROMPT", desc: "Instrucción estratégica que le damos a una Inteligencia Artificial para generar código, texto o soluciones.", color: "#06b6d4" },
+                    { word: "ALGORITMO", desc: "Secuencia lógica de pasos diseñada para resolver un problema o automatizar una tarea.", color: "#3b82f6" },
+                    { word: "HTML", desc: "Lenguaje estándar que define la estructura de cualquier aplicación o página web.", color: "#10b981" },
+                    { word: "JAVASCRIPT", desc: "Lenguaje que da vida, lógica e interactividad en tiempo real a las aplicaciones web.", color: "#eab308" },
+                    { word: "AUTOMATIZAR", desc: "Hacer que la tecnología ejecute tareas repetitivas sola, ahorrando tiempo humano.", color: "#8b5cf6" },
+                    { word: "INTERFAZ", desc: "El espacio visual e interactivo donde el ser humano se comunica con el software.", color: "#ec4899" },
+                    { word: "DATOS", desc: "Materia prima digital que alimenta las bases de datos y entrena los modelos de IA.", color: "#f97316" },
+                    { word: "CODIGO", desc: "El lenguaje con el que materializamos ideas y construimos herramientas digitales.", color: "#14b8a6" }
+                ]
+            },
+            media: {
+                name: "Cine, Música & Eventos",
+                words: [
+                    { word: "ACUSTICA", desc: "Ciencia que estudia cómo se propaga el sonido en un recinto o escenario en vivo.", color: "#ec4899" },
+                    { word: "CONSOLA", desc: "Centro de control donde se mezclan y ecualizan múltiples señales de audio en un evento.", color: "#8b5cf6" },
+                    { word: "STREAMING", desc: "Transmisión digital en directo de audio y video a través de internet hacia todo el mundo.", color: "#06b6d4" },
+                    { word: "ESCENARIO", desc: "Espacio físico diseñado para la puesta en escena de conciertos, teatro o conferencias.", color: "#f59e0b" },
+                    { word: "MICROFONO", desc: "Transductor que convierte las ondas sonoras de la voz o instrumentos en señales eléctricas.", color: "#10b981" },
+                    { word: " RODAJE", desc: "Proceso de grabación audiovisual y captura de escenas para cine o producción digital.", color: "#3b82f6" },
+                    { word: "DIRECTO", desc: "Emisión que ocurre en tiempo real sin edición previa, exigiendo precisión técnica.", color: "#ef4444" },
+                    { word: "MEZCLA", desc: "Arte de equilibrar volúmenes, frecuencias y paneo de múltiples pistas sonoras.", color: "#14b8a6" }
+                ]
+            },
+            business: {
+                name: "Emprendimiento & Futuro",
+                words: [
+                    { word: "INNOVAR", desc: "Crear o modificar un producto o proceso aplicando tecnología para generar valor real.", color: "#10b981" },
+                    { word: "PROTOTIPO", desc: "Primera versión funcional de una idea construida rápido para probarla con usuarios reales.", color: "#06b6d4" },
+                    { word: "LIDERAZGO", desc: "Capacidad de inspirar y guiar a un equipo hacia la consecución de una visión común.", color: "#8b5cf6" },
+                    { word: "ESTRATEGIA", desc: "Plan de acción inteligente para alcanzar metas superando la incertidumbre.", color: "#3b82f6" },
+                    { word: "IMPACTO", desc: "Cambio positivo social, económico o ambiental que genera un proyecto en su comunidad.", color: "#f59e0b" },
+                    { word: "CREATIVO", desc: "Mente capaz de conectar conceptos distintos para dar vida a soluciones originales.", color: "#ec4899" },
+                    { word: "EQUIPO", desc: "Personas con talentos complementarios colaborando por un mismo propósito.", color: "#14b8a6" },
+                    { word: "FUTURO", desc: "El horizonte que construimos hoy mediante la educación, la ciencia y la iniciativa.", color: "#6366f1" }
+                ]
+            },
+            nature: {
+                name: "Naturaleza & Cultura",
+                words: [
+                    { word: "MONTAÑA", desc: "Elevación natural del terreno que regula el clima, el agua y alberga ecosistemas únicos.", color: "#10b981" },
+                    { word: "CAFETAL", desc: "Terreno cultivado con árboles de café, símbolo de tradición agrícola y biodiversidad.", color: "#eab308" },
+                    { word: "CASCADA", desc: "Caída natural de agua desde cierta altura que oxigena los ríos y llena de energía el paisaje.", color: "#06b6d4" },
+                    { word: "CONDOR", desc: "Ave majestuosa de los Andes, símbolo de libertad y equilibrio en las alturas.", color: "#6366f1" },
+                    { word: "ORQUIDEA", desc: "Flor emblemática de extraordinaria belleza y diversidad en los bosques de niebla.", color: "#ec4899" },
+                    { word: "BOSQUE", desc: "Ecosistema vital repleto de árboles que captura carbono y produce oxígeno.", color: "#22c55e" },
+                    { word: "PARAMO", desc: "Fábrica natural de agua dulce ubicada en las cumbres de la cordillera andina.", color: "#3b82f6" },
+                    { word: "SEMILLA", desc: "Origen de toda planta; representa el potencial de crecimiento y sostenibilidad.", color: "#f97316" }
+                ]
+            }
+        };
+
+        // Limpiar espacios accidentales en las palabras predefinidas
+        Object.keys(themesData).forEach(k => {
+            themesData[k].words.forEach(w => w.word = w.word.trim());
+        });
+
+        const gridSize = 12;
+        let currentThemeKey = 'tech';
+        let activeWords = [];
+        let grid = [];
+        let wordLocations = {};
+        let selectedCells = [];
+        let foundWords = [];
+        let timerInterval = null;
+        let secondsElapsed = 0;
+        let isDragging = false;
+        let startCoord = null;
+        let hintsRemaining = 3;
+        let soundEnabled = true;
+        let difficulty = 'medium';
+        let hasSavedScoreThisRound = false;
+
+        // Sintetizador de Audio
+        let audioCtx = null;
+        function playSound(type) {
+            if (!soundEnabled) return;
+            try {
+                if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const now = audioCtx.currentTime;
+
+                if (type === 'select') {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.frequency.setValueAtTime(360 + (selectedCells.length * 35), now);
+                    gain.gain.setValueAtTime(0.04, now);
+                    osc.start(now);
+                    osc.stop(now + 0.04);
+                } else if (type === 'success') {
+                    [587.33, 880].forEach((freq, i) => {
+                        const osc = audioCtx.createOscillator();
+                        const gain = audioCtx.createGain();
+                        osc.connect(gain);
+                        gain.connect(audioCtx.destination);
+                        osc.frequency.setValueAtTime(freq, now + i * 0.09);
+                        gain.gain.setValueAtTime(0.08, now + i * 0.09);
+                        osc.start(now + i * 0.09);
+                        osc.stop(now + i * 0.09 + 0.18);
+                    });
+                } else if (type === 'hint') {
+                    const osc = audioCtx.createOscillator();
+                    const gain = audioCtx.createGain();
+                    osc.connect(gain);
+                    gain.connect(audioCtx.destination);
+                    osc.frequency.setValueAtTime(680, now);
+                    gain.gain.setValueAtTime(0.06, now);
+                    osc.start(now);
+                    osc.stop(now + 0.15);
+                } else if (type === 'win') {
+                    [523.25, 659.25, 783.99, 1046.50].forEach((freq, idx) => {
+                        const o = audioCtx.createOscillator();
+                        const g = audioCtx.createGain();
+                        o.connect(g);
+                        g.connect(audioCtx.destination);
+                        o.frequency.setValueAtTime(freq, now + idx * 0.1);
+                        g.gain.setValueAtTime(0.1, now + idx * 0.1);
+                        o.start(now + idx * 0.1);
+                        o.stop(now + idx * 0.1 + 0.25);
+                    });
+                }
+            } catch (e) {}
+        }
+
+        function toggleSound() {
+            soundEnabled = !soundEnabled;
+            document.getElementById('soundBtn').innerText = soundEnabled ? '🔊' : '🔇';
+        }
+
+        function changeTheme() {
+            currentThemeKey = document.getElementById('themeSelect').value;
+            startGame();
+        }
+
+        function changeDifficulty() {
+            difficulty = document.getElementById('difficultySelect').value;
+            startGame();
+        }
+
+        function startGame() {
+            clearInterval(timerInterval);
+            secondsElapsed = 0;
+            foundWords = [];
+            selectedCells = [];
+            hintsRemaining = 3;
+            hasSavedScoreThisRound = false;
+
+            const themeObj = themesData[currentThemeKey];
+            activeWords = themeObj.words;
+
+            document.getElementById('activeThemeBadge').innerText = `Tema: ${themeObj.name}`;
+            document.getElementById('winModal').classList.add('hidden');
+            document.getElementById('saveScoreSection').classList.remove('hidden');
+            document.getElementById('hintCount').innerText = hintsRemaining;
+            document.getElementById('hintBtn').disabled = false;
+            document.getElementById('hintBtn').classList.remove('opacity-40', 'cursor-not-allowed');
+            document.getElementById('currentWordPreview').innerText = 'ARRASTRA PARA SELECCIONAR';
+
+            updateTimerDisplay();
+            timerInterval = setInterval(() => {
+                secondsElapsed++;
+                updateTimerDisplay();
+            }, 1000);
+
+            generateGrid();
+            renderBoard();
+            renderWordList();
+            renderLeaderboard();
+        }
+
+        function formatTime(totalSeconds) {
+            const mins = String(Math.floor(totalSeconds / 60)).padStart(2, '0');
+            const secs = String(totalSeconds % 60).padStart(2, '0');
+            return `${mins}:${secs}`;
+        }
+
+        function updateTimerDisplay() {
+            document.getElementById('timer').innerText = formatTime(secondsElapsed);
+        }
+
+        function generateGrid() {
+            grid = Array(gridSize).fill(null).map(() => Array(gridSize).fill(''));
+            wordLocations = {};
+
+            let directions = [
+                { dr: 0, dc: 1 },
+                { dr: 1, dc: 0 }
+            ];
+            if (difficulty === 'medium' || difficulty === 'hard') {
+                directions.push({ dr: 1, dc: 1 });
+                directions.push({ dr: -1, dc: 1 });
+            }
+
+            const sortedItems = [...activeWords].sort((a, b) => b.word.length - a.word.length);
+
+            sortedItems.forEach(item => {
+                let wordToPlace = item.word;
+                if (difficulty === 'hard' && Math.random() > 0.5) {
+                    wordToPlace = wordToPlace.split('').reverse().join('');
+                }
+
+                let placed = false;
+                let attempts = 0;
+
+                while (!placed && attempts < 350) {
+                    attempts++;
+                    const dir = directions[Math.floor(Math.random() * directions.length)];
+                    const startR = Math.floor(Math.random() * gridSize);
+                    const startC = Math.floor(Math.random() * gridSize);
+
+                    const endR = startR + dir.dr * (wordToPlace.length - 1);
+                    const endC = startC + dir.dc * (wordToPlace.length - 1);
+
+                    if (endR < 0 || endR >= gridSize || endC < 0 || endC >= gridSize) continue;
+
+                    let canPlace = true;
+                    for (let i = 0; i < wordToPlace.length; i++) {
+                        const r = startR + dir.dr * i;
+                        const c = startC + dir.dc * i;
+                        if (grid[r][c] !== '' && grid[r][c] !== wordToPlace[i]) {
+                            canPlace = false;
+                            break;
+                        }
+                    }
+
+                    if (canPlace) {
+                        const coords = [];
+                        for (let i = 0; i < wordToPlace.length; i++) {
+                            const r = startR + dir.dr * i;
+                            const c = startC + dir.dc * i;
+                            grid[r][c] = wordToPlace[i];
+                            coords.push({ r, c });
+                        }
+                        wordLocations[item.word] = wordToPlace === item.word ? coords : coords.reverse();
+                        placed = true;
+                    }
+                }
+            });
+
+            const alphabet = "ABCDEFGHIJKLMNÑOPQRSTUVWXYZ";
+            for (let r = 0; r < gridSize; r++) {
+                for (let c = 0; c < gridSize; c++) {
+                    if (grid[r][c] === '') {
+                        grid[r][c] = alphabet[Math.floor(Math.random() * alphabet.length)];
+                    }
+                }
+            }
+        }
+
+        function renderBoard() {
+            const boardEl = document.getElementById('board');
+            boardEl.innerHTML = '';
+
+            for (let r = 0; r < gridSize; r++) {
+                for (let c = 0; c < gridSize; c++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'letter-cell w-7 h-7 sm:w-9 sm:h-9 md:w-10 md:h-10 flex items-center justify-center font-bold text-xs sm:text-base bg-slate-950 rounded-lg cursor-pointer border border-slate-800 text-gray-200';
+                    cell.dataset.row = r;
+                    cell.dataset.col = c;
+                    cell.innerText = grid[r][c];
+
+                    cell.addEventListener('mousedown', (e) => {
+                        e.preventDefault();
+                        startSelection(r, c);
+                    });
+                    cell.addEventListener('mouseenter', () => continueSelection(r, c));
+
+                    boardEl.appendChild(cell);
+                }
+            }
+
+            boardEl.addEventListener('touchstart', handleTouchStart, { passive: false });
+            boardEl.addEventListener('touchmove', handleTouchMove, { passive: false });
+            boardEl.addEventListener('touchend', endSelection);
+            document.addEventListener('mouseup', endSelection);
+        }
+
+        function handleTouchStart(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const target = document.elementFromPoint(touch.clientX, touch.clientY);
+            if (target && target.dataset.row !== undefined) {
+                startSelection(parseInt(target.dataset.row), parseInt(target.dataset.col));
+            }
+        }
+
+        function handleTouchMove(e) {
+            if (!isDragging) return;
+            e.preventDefault();
+            const touch = e.touches[0];
+            const target = document.elementFromPoint(touch.clientX, touch.clientY);
+            if (target && target.dataset.row !== undefined) {
+                continueSelection(parseInt(target.dataset.row), parseInt(target.dataset.col));
+            }
+        }
+
+        function renderWordList() {
+            const listEl = document.getElementById('wordList');
+            listEl.innerHTML = '';
+
+            activeWords.forEach(item => {
+                const isFound = foundWords.includes(item.word);
+                const li = document.createElement('li');
+                li.className = `flex items-center justify-between px-3 py-2 rounded-xl cursor-pointer transition border ${
+                    isFound 
+                        ? 'bg-emerald-950/40 border-emerald-800/50 text-emerald-400 line-through' 
+                        : 'bg-slate-950 border-slate-800/80 text-gray-300 hover:border-cyan-500/50'
+                }`;
+                li.onclick = () => showWordDefinition(item);
+                li.innerHTML = `
+                    <span class="font-semibold tracking-wide truncate">${item.word}</span>
+                    <span>${isFound ? '✅' : '🔎'}</span>
+                `;
+                listEl.appendChild(li);
+            });
+
+            document.getElementById('score').innerText = `${foundWords.length} / ${activeWords.length}`;
+        }
+
+        function showWordDefinition(item) {
+            document.getElementById('infoText').innerHTML = `<strong class="text-white">${item.word}:</strong> ${item.desc}`;
+        }
+
+        function startSelection(r, c) {
+            isDragging = true;
+            startCoord = { r, c };
+            selectedCells = [{ r, c }];
+            updateSelectionPreview();
+            highlightSelection();
+            playSound('select');
+        }
+
+        function continueSelection(r, c) {
+            if (!isDragging || !startCoord) return;
+
+            const dr = r - startCoord.r;
+            const dc = c - startCoord.c;
+
+            if (dr === 0 || dc === 0 || Math.abs(dr) === Math.abs(dc)) {
+                const steps = Math.max(Math.abs(dr), Math.abs(dc));
+                const stepR = steps === 0 ? 0 : dr / steps;
+                const stepC = steps === 0 ? 0 : dc / steps;
+
+                const newSelection = [];
+                for (let i = 0; i <= steps; i++) {
+                    newSelection.push({
+                        r: startCoord.r + stepR * i,
+                        c: startCoord.c + stepC * i
+                    });
+                }
+
+                if (newSelection.length !== selectedCells.length || 
+                    newSelection[newSelection.length - 1].r !== selectedCells[selectedCells.length - 1]?.r ||
+                    newSelection[newSelection.length - 1].c !== selectedCells[selectedCells.length - 1]?.c) {
+                    selectedCells = newSelection;
+                    updateSelectionPreview();
+                    highlightSelection();
+                    playSound('select');
+                }
+            }
+        }
+
+        function updateSelectionPreview() {
+            const word = selectedCells.map(cell => grid[cell.r][cell.c]).join('');
+            document.getElementById('currentWordPreview').innerText = word || 'ARRASTRA PARA SELECCIONAR';
+        }
+
+        function endSelection() {
+            if (!isDragging) return;
+            isDragging = false;
+            startCoord = null;
+
+            const formedWord = selectedCells.map(cell => grid[cell.r][cell.c]).join('');
+            const reversedWord = formedWord.split('').reverse().join('');
+
+            const matchedItem = activeWords.find(item => 
+                (item.word === formedWord || item.word === reversedWord) && !foundWords.includes(item.word)
+            );
+
+            if (matchedItem) {
+                foundWords.push(matchedItem.word);
+                markCellsAsFound(matchedItem.color);
+                playSound('success');
+                renderWordList();
+                showWordDefinition(matchedItem);
+                document.getElementById('currentWordPreview').innerText = `¡${matchedItem.word}! ✨`;
+
+                if (foundWords.length === activeWords.length) {
+                    handleWin();
+                }
+            } else {
+                clearSelectionUI();
+                document.getElementById('currentWordPreview').innerText = 'ARRASTRA PARA SELECCIONAR';
+            }
+            selectedCells = [];
+        }
+
+        function highlightSelection() {
+            document.querySelectorAll('.letter-cell').forEach(cell => cell.classList.remove('selected'));
+            selectedCells.forEach(cell => {
+                const el = document.querySelector(`[data-row='${cell.r}'][data-col='${cell.c}']`);
+                if (el) el.classList.add('selected');
+            });
+        }
+
+        function markCellsAsFound(color) {
+            selectedCells.forEach(cell => {
+                const el = document.querySelector(`[data-row='${cell.r}'][data-col='${cell.c}']`);
+                if (el) {
+                    el.classList.remove('selected', 'hint-flash');
+                    el.classList.add('found');
+                    el.style.backgroundColor = color;
+                    el.style.borderColor = color;
+                }
+            });
+        }
+
+        function clearSelectionUI() {
+            document.querySelectorAll('.letter-cell').forEach(cell => cell.classList.remove('selected'));
+        }
+
+        function useHint() {
+            if (hintsRemaining <= 0) return;
+            const pendingWords = activeWords.filter(item => !foundWords.includes(item.word));
+            if (pendingWords.length === 0) return;
+
+            hintsRemaining--;
+            secondsElapsed += 10;
+            updateTimerDisplay();
+            document.getElementById('hintCount').innerText = hintsRemaining;
+            if (hintsRemaining === 0) {
+                document.getElementById('hintBtn').disabled = true;
+                document.getElementById('hintBtn').classList.add('opacity-40', 'cursor-not-allowed');
+            }
+
+            const randomPending = pendingWords[Math.floor(Math.random() * pendingWords.length)];
+            const coords = wordLocations[randomPending.word];
+            if (coords && coords.length > 0) {
+                const firstCell = coords[0];
+                const el = document.querySelector(`[data-row='${firstCell.r}'][data-col='${firstCell.c}']`);
+                if (el) {
+                    playSound('hint');
+                    el.classList.add('hint-flash');
+                    showWordDefinition(randomPending);
+                    setTimeout(() => el.classList.remove('hint-flash'), 3500);
+                }
+            }
+        }
+
+        function handleWin() {
+            clearInterval(timerInterval);
+            playSound('win');
+
+            if (typeof confetti === 'function') {
+                confetti({ particleCount: 130, spread: 85, origin: { y: 0.6 } });
+            }
+
+            document.getElementById('finalTime').innerText = formatTime(secondsElapsed);
+            document.getElementById('playerNameInput').value = '';
+            setTimeout(() => {
+                document.getElementById('winModal').classList.remove('hidden');
+                document.getElementById('playerNameInput').focus();
+            }, 500);
+        }
+
+        // --- SISTEMA DE RÉCORDS (LEADERBOARD POR TEMÁTICA) ---
+        function getLeaderboardKey() {
+            return `sopa_records_${currentThemeKey}`;
+        }
+
+        function savePlayerRecord() {
+            if (hasSavedScoreThisRound) return;
+            const nameInput = document.getElementById('playerNameInput').value.trim() || 'Visitante Anónimo';
+            const key = getLeaderboardKey();
+            const currentRecords = JSON.parse(localStorage.getItem(key) || '[]');
+
+            currentRecords.push({
+                name: nameInput,
+                time: secondsElapsed,
+                diff: difficulty === 'easy' ? 'Fácil' : difficulty === 'medium' ? 'Medio' : 'Experto'
+            });
+
+            // Ordenar de menor a mayor tiempo y conservar Top 5
+            currentRecords.sort((a, b) => a.time - b.time);
+            const top5 = currentRecords.slice(0, 5);
+            localStorage.setItem(key, JSON.stringify(top5));
+
+            hasSavedScoreThisRound = true;
+            document.getElementById('saveScoreSection').classList.add('hidden');
+            renderLeaderboard();
+        }
+
+        function renderLeaderboard() {
+            const listEl = document.getElementById('leaderboardList');
+            const records = JSON.parse(localStorage.getItem(getLeaderboardKey()) || '[]');
+
+            if (records.length === 0) {
+                listEl.innerHTML = `
+                    <div class="text-center py-4 text-gray-500">
+                        Sin récords aún en este tema.<br>¡Sé el primero en completarlo!
+                    </div>
+                `;
+                return;
+            }
+
+            const medals = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣'];
+            listEl.innerHTML = records.map((rec, idx) => `
+                <div class="flex items-center justify-between bg-slate-950 px-3 py-2 rounded-xl border border-slate-800/80">
+                    <div class="flex items-center gap-2 truncate">
+                        <span>${medals[idx] || '🏅'}</span>
+                        <span class="font-bold text-gray-200 truncate">${rec.name}</span>
+                        <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-gray-400">${rec.diff}</span>
+                    </div>
+                    <span class="title-font font-bold text-yellow-400 shrink-0">${formatTime(rec.time)}</span>
+                </div>
+            `).join('');
+        }
+
+        function clearRecords() {
+            localStorage.removeItem(getLeaderboardKey());
+            renderLeaderboard();
+        }
+
+        // --- GENERADOR DE TEMÁTICAS PERSONALIZADAS EN VIVO ---
+        function openCustomModal() {
+            document.getElementById('customModal').classList.remove('hidden');
+        }
+        function closeCustomModal() {
+            document.getElementById('customModal').classList.add('hidden');
+        }
+        function applyCustomTheme() {
+            const themeName = document.getElementById('customThemeName').value.trim() || 'Tema Personalizado';
+            const rawWords = document.getElementById('customWordsInput').value;
+            const colors = ['#06b6d4', '#10b981', '#8b5cf6', '#ec4899', '#f59e0b', '#3b82f6', '#14b8a6', '#f97316'];
+
+            const parsedWords = rawWords
+                .split(',')
+                .map(w => w.trim().toUpperCase().replace(/[^A-ZÑ]/g, ''))
+                .filter(w => w.length >= 2 && w.length <= gridSize)
+                .slice(0, 10);
+
+            if (parsedWords.length < 2) {
+                alert('Por favor ingresa al menos 2 palabras válidas separadas por coma (máximo 12 letras cada una).');
+                return;
+            }
+
+            themesData.custom = {
+                name: themeName,
+                words: parsedWords.map((w, i) => ({
+                    word: w,
+                    desc: `Concepto personalizado de la temática "${themeName}" generado dinámicamente en vivo.`,
+                    color: colors[i % colors.length]
+                }))
+            };
+
+            // Añadir opción al selector si no existe
+            const select = document.getElementById('themeSelect');
+            let customOpt = select.querySelector('option[value="custom"]');
+            if (!customOpt) {
+                customOpt = document.createElement('option');
+                customOpt.value = 'custom';
+                select.appendChild(customOpt);
+            }
+            customOpt.innerText = `✨ ${themeName}`;
+            select.value = 'custom';
+            currentThemeKey = 'custom';
+
+            closeCustomModal();
+            startGame();
+        }
+
+        // --- MODAL DE EXPLICACIÓN IA ---
+        function openAIModal() {
+            document.getElementById('aiModal').classList.remove('hidden');
+        }
+        function closeAIModal() {
+            document.getElementById('aiModal').classList.add('hidden');
+        }
+
+        window.onload = startGame;
+    </script>
+</body>
+</html>
